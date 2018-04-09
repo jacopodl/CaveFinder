@@ -1,4 +1,8 @@
 import argparse
+import sys
+
+from elf import *
+from finder import search4cave
 
 __version__ = "1.0.0"
 
@@ -18,6 +22,43 @@ def main():
     parser.add_argument("--size", help="Minimum size of a code cave, Default: 100", type=int, default=100)
     parser.add_argument("--bytes", help="Bytes to search, Default: 0x00", type=str, default="\x00")
     args = parser.parse_args()
+
+    print("[*] Loading binary '%s'..." % args.binary, end="\n\n")
+
+    try:
+        stream = open(args.binary, "rb")
+    except FileNotFoundError as err:
+        print(err, file=sys.stderr)
+        exit(-1)
+
+    btype = load_binary(stream)
+
+    if btype is None:
+        print("Unsupported binary type")
+        exit(-1)
+
+    caves = search_by_type(stream, args.size, bytes(args.bytes.encode("ascii")), btype)
+
+    print("Caves found: %d" % len(caves), end="\n\n")
+    for cave in caves:
+        print(cave, end="\n\n")
+    print("[*] Mining finished")
+
+
+def load_binary(stream):
+    if Elf.verify(stream):
+        return Elf(stream)
+    return None
+
+
+def search_by_type(stream, cave_size, _bytes, btype):
+    caves = []
+    if isinstance(btype, Elf):
+        elf: Elf = btype
+        for section in elf.sections:
+            caves = caves + search4cave(stream, elf.get_section_name(section), section.sh_size, cave_size, 0, _bytes)
+
+    return caves
 
 
 if __name__ == "__main__":
