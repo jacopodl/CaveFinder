@@ -19,7 +19,7 @@ class MiningResult(object):
                           "info:               {info}"]).format(**self.__dict__)
 
 
-def search4cave(stream: io.RawIOBase, section_name: str, section_size: int, cave_size: int, virtaddr: int,
+def search4cave(stream: io.RawIOBase, section_name: str, section_size: int, section_info, cave_size: int, virtaddr: int,
                 _bytes: bytes):
     caves = []
     byte_count = 0
@@ -38,6 +38,7 @@ def search4cave(stream: io.RawIOBase, section_name: str, section_size: int, cave
                 mr.cave_end = offset
                 mr.cave_size = byte_count
                 mr.virtaddr = virtaddr + mr.cave_begin
+                mr.info = section_info
                 caves.append(mr)
             byte_count = 0
             continue

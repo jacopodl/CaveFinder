@@ -97,8 +97,8 @@ class ElfHeader(object):
         return '\n'.join(['ELF HEADER',
                           'Magic:                       7F 45 4C 46',
                           'ABI:                         %s',
-                          'Type:                        {e_type} %s',
-                          'Machine:                     {e_machine} %s',
+                          'Type:                        {e_type} (%s)',
+                          'Machine:                     {e_machine} (%s)',
                           'Endianness and word size:    %s endian - %d bit',
                           'Version:                     {e_version}',
                           'Entry point:                 {e_entry:#x}',
@@ -112,8 +112,8 @@ class ElfHeader(object):
                           'Number of section headers:   {e_shnum}',
                           'String table index:          {e_shstrnd}']) \
                    .format(**self.__dict__) % (self.abi,
-                                               ElfHeader.type_tostr(self.e_type),
-                                               ElfHeader.em_tostr(self.e_machine),
+                                               self.type_str(),
+                                               self.em_str(),
                                                self.endianness,
                                                self.wordsz)
 
@@ -133,8 +133,7 @@ class ElfHeader(object):
     def wordsz(self):
         return 32 if self.e_ident[ElfHeader.CLASS] == ElfHeader.CLASS32 else 64
 
-    @staticmethod
-    def type_tostr(etype):
+    def type_str(self):
         val = {0x00: "No file type",
                0x01: "Relocatable file",
                0x02: "Executable file",
@@ -143,10 +142,9 @@ class ElfHeader(object):
                0xFF00: "Processor-specific",
                0xFFFF: "Processor-specific"}
 
-        return "Unknown: %02x" % etype if etype not in val else val[etype]
+        return "Unknown: %02x" % self.e_type if self.e_type not in val else val[self.e_type]
 
-    @staticmethod
-    def em_tostr(elf_machine):
+    def em_str(self):
         val = {0x00: "No machine",
                0x01: "AT&T WE 32100",
                0x02: "SPARC",
@@ -161,10 +159,32 @@ class ElfHeader(object):
                0x3E: "AMD x86-64",
                0xB7: "AArch64"}
 
-        return "Unknown: %02x" % elf_machine if elf_machine not in val else val[elf_machine]
+        return "Unknown: %02x" % self.e_machine if self.e_machine not in val else val[self.e_machine]
 
 
 class ElfShdr(object):
+    TYPE_NULL = 0x00
+    TYPE_PROGBITS = 0x01
+    TYPE_SYMTAB = 0x02
+    TYPE_STRTAB = 0x03
+    TYPE_RELA = 0x04
+    TYPE_HASH = 0x05
+    TYPE_DYNAMIC = 0x06
+    TYPE_NOTE = 0x07
+    TYPE_NOBITS = 0x08
+    TYPE_REL = 0x09
+    TYPE_SHLIB = 0x0A
+    TYPE_DYNSYM = 0x0B
+    TYPE_LOPROC = 0x70000000
+    TYPE_HIPROC = 0x7FFFFFFF
+    TYPE_LOUSER = 0x80000000
+    TYPE_HIUSER = 0xFFFFFFFF
+
+    FLAGS_WRITE = 0x01
+    FLAGS_ALLOC = 0x02
+    FLAGS_EXECINSTR = 0x04
+    FLAGS_MASKPROC = 0xF0000000
+
     def __init__(self, stream: io.RawIOBase, header: ElfHeader):
         self.sh_name = 0
         self.sh_type = 0
@@ -206,6 +226,36 @@ class ElfShdr(object):
         self.sh_addralign = int.from_bytes(stream.read(ELF64_XWORD), byteorder=endianness)
         self.sh_entsize = int.from_bytes(stream.read(ELF64_XWORD), byteorder=endianness)
 
+    def type_str(self):
+        val = {ElfShdr.TYPE_NULL: "SHT_NULL",
+               ElfShdr.TYPE_PROGBITS: "SHT_PROGBITS",
+               ElfShdr.TYPE_SYMTAB: "SHT_SYMTAB",
+               ElfShdr.TYPE_STRTAB: "SHT_STRTAB",
+               ElfShdr.TYPE_RELA: "SHT_RELA",
+               ElfShdr.TYPE_HASH: "SHT_HASH",
+               ElfShdr.TYPE_DYNAMIC: "SHT_DYNAMIC",
+               ElfShdr.TYPE_NOTE: "SHT_NOTE",
+               ElfShdr.TYPE_NOBITS: "SHT_NOBITS",
+               ElfShdr.TYPE_REL: "SHT_REL",
+               ElfShdr.TYPE_SHLIB: "SHT_SHLIB",
+               ElfShdr.TYPE_DYNSYM: "SHT_DYNSYM",
+               ElfShdr.TYPE_LOPROC: "SHT_LOPROC",
+               ElfShdr.TYPE_HIPROC: "SHT_HIPROC",
+               ElfShdr.TYPE_LOUSER: "SHT_LOUSER",
+               ElfShdr.TYPE_HIUSER: "SHT_HIUSER"}
+        return "Unknown: %02x" % self.sh_type if self.sh_type not in val else val[self.sh_type]
+
+    def flags_str(self):
+        retval = []
+        val = {ElfShdr.FLAGS_WRITE: "SHF_WRITE",
+               ElfShdr.FLAGS_ALLOC: "SHF_ALLOC",
+               ElfShdr.FLAGS_EXECINSTR: "SHF_EXECINSTR",
+               ElfShdr.FLAGS_MASKPROC: "SHF_MASKPROC"}
+        for key in val:
+            if self.sh_flags & key == key:
+                retval.append(val[key])
+        return " | ".join(retval)
+
 
 class Elf:
     ELF_MAGIC = bytearray([0x7f, 0x45, 0x4c, 0x46])
@@ -228,6 +278,9 @@ class Elf:
         # Load strings table
         stream.seek(self.sections[self.header.e_shstrnd].sh_offset)
         self.shstr = stream.read(self.sections[self.header.e_shstrnd].sh_size)
+
+    def __str__(self):
+        return str(self.header)
 
     def get_section_name(self, section: ElfShdr):
         buf = bytearray()

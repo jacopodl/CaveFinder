@@ -37,9 +37,11 @@ def main():
         print("Unsupported binary type")
         exit(-1)
 
+    print(btype, end="\n\n")
+
     caves = search_by_type(stream, args.size, bytes(args.bytes.encode("ascii")), btype)
 
-    print("Caves found: %d" % len(caves), end="\n\n")
+    print("[!] Caves found: %d" % len(caves), end="\n\n")
     for cave in caves:
         print(cave, end="\n\n")
     print("[*] Mining finished")
@@ -56,7 +58,8 @@ def search_by_type(stream, cave_size, _bytes, btype):
     if isinstance(btype, Elf):
         elf: Elf = btype
         for section in elf.sections:
-            caves = caves + search4cave(stream, elf.get_section_name(section), section.sh_size, cave_size, 0, _bytes)
+            info = "Type: %s, Flags: %s" % (section.type_str(), section.flags_str())
+            caves += search4cave(stream, elf.get_section_name(section), section.sh_size, info, cave_size, 0, _bytes)
 
     return caves
 
