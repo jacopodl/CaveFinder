@@ -21,6 +21,34 @@ MACHO_CIGAM64 = bytes([0xCF, 0xFA, 0xED, 0xFE])
 
 
 class MachOHeader(object):
+    ABI64 = 0x01000000
+
+    FLAGS_NOUNDEFS = 0x1
+    FLAGS_INCRLINK = 0x2
+    FLAGS_DYLDLINK = 0x4
+    FLAGS_BINDATLOAD = 0x8
+    FLAGS_PREBOUND = 0x10
+    FLAGS_SPLIT_SEGS = 0x20
+    FLAGS_LAZY_INIT = 0x40
+    FLAGS_TWOLEVEL = 0x80
+    FLAGS_FORCE_FLAT = 0x100
+    FLAGS_NOMULTIDEFS = 0x200
+    FLAGS_NOFIXPREBINDING = 0x400
+    FLAGS_PREBINDABLE = 0x800
+    FLAGS_ALLMODSBOUND = 0x1000
+    FLAGS_SUBSECTIONS_VIA_SYMBOLS = 0x2000
+    FLAGS_CANONICAL = 0x4000
+    FLAGS_WEAK_DEFINES = 0x8000
+    FLAGS_BINDS_TO_WEAK = 0x10000
+    FLAGS_ALLOW_STACK_EXECUTION = 0x20000
+    FLAGS_ROOT_SAFE = 0x40000
+    FLAGS_SETUID_SAFE = 0x80000
+    FLAGS_NO_REEXPORTED_DYLIBS = 0x100000
+    FLAGS_PIE = 0x200000
+    FLAGS_DEAD_STRIPPABLE_DYLIB = 0x400000
+    FLAGS_HAS_TLV_DESCRIPTORS = 0x800000
+    FLAGS_NO_HEAP_EXECUTION = 0x1000000
+
     def __init__(self, stream: io.RawIOBase):
         self.magic = stream.read(MACHO_UINT32)
         self.cputype = 0
@@ -43,12 +71,13 @@ class MachOHeader(object):
     def __str__(self):
         return '\n'.join(['Mach-O HEADER',
                           'Magic:                       {magic:#x}',
-                          'CPU type:                    {cputype}',
+                          'CPU type:                    %s',
                           'CPU subtype:                 {cpusubtype}',
-                          'Filetype:                    {filetype}',
+                          'Filetype:                    %s',
                           'Number of commands:          {ncmds}',
-                          'Size of commands:            {sizeofcmds}',
-                          'Flags:                       {flags}']).format(**self.__dict__)
+                          'Size of commands:            {sizeofcmds} bytes',
+                          'Flags:                       {flags:#x} %s']).format(**self.__dict__) % (
+                   self.cputype_str(), self.filetype_str(), self.flags_str())
 
     def __parse32(self, stream: io.RawIOBase, endianness):
         self.cputype = int.from_bytes(stream.read(MACHO_CPUTYPE), byteorder=endianness)
@@ -73,6 +102,71 @@ class MachOHeader(object):
     @property
     def endianness(self):
         return 'little' if self.__should_swap_bytes() else 'big'
+
+    def cputype_str(self):
+        val = {-1: "any",
+               1: "VAX",
+               6: "MC680x0",
+               7: "Intel x86",
+               7 | MachOHeader.ABI64: "AMD x86_64",
+               10: "MC98000",
+               11: "HPPA",
+               12: "ARM",
+               13: "MC88000",
+               14: "SPARC",
+               15: "I860",
+               18: "PowerPC",
+               18 | MachOHeader.ABI64: "PowerPC64"}
+
+        return "Unknown: %02x" % self.cputype if self.cputype not in val else val[self.cputype]
+
+    def filetype_str(self):
+        val = {0x01: "Object",
+               0x02: "Execute",
+               0x03: "FVMLIB",
+               0x04: "CORE",
+               0x05: "PRELOAD",
+               0x06: "DYLIB",
+               0x07: "DYLINKER",
+               0x08: "Bundle",
+               0x09: "DYLIB_STUB",
+               0x0A: "DSYM",
+               0x0B: "Kext_Bundle"}
+
+        return "Unknown: %02x" % self.cputype if self.cputype not in val else val[self.cputype]
+
+    def flags_str(self):
+        retval = []
+        val = {MachOHeader.FLAGS_NOUNDEFS: "NOUNDEFS",
+               MachOHeader.FLAGS_INCRLINK: "INCRLINK",
+               MachOHeader.FLAGS_DYLDLINK: "DYLDLINK",
+               MachOHeader.FLAGS_BINDATLOAD: "BINDATLOAD",
+               MachOHeader.FLAGS_PREBOUND: "PREBOUND",
+               MachOHeader.FLAGS_SPLIT_SEGS: "SPLIT_SEGS",
+               MachOHeader.FLAGS_LAZY_INIT: "LAZY_INIT",
+               MachOHeader.FLAGS_TWOLEVEL: "TWOLEVEL",
+               MachOHeader.FLAGS_FORCE_FLAT: "FORCE_FLAT",
+               MachOHeader.FLAGS_NOMULTIDEFS: "NOMULTIDEFS",
+               MachOHeader.FLAGS_NOFIXPREBINDING: "NOFIXPREBINDING",
+               MachOHeader.FLAGS_PREBINDABLE: "PREBINDABLE",
+               MachOHeader.FLAGS_ALLMODSBOUND: "ALLMODSBOUND",
+               MachOHeader.FLAGS_SUBSECTIONS_VIA_SYMBOLS: "SUBSECTIONS_VIA_SYMBOLS",
+               MachOHeader.FLAGS_CANONICAL: "CANONICAL",
+               MachOHeader.FLAGS_WEAK_DEFINES: "WEAK_DEFINES",
+               MachOHeader.FLAGS_BINDS_TO_WEAK: "BINDS_TO_WEAK",
+               MachOHeader.FLAGS_ALLOW_STACK_EXECUTION: "ALLOW_STACK_EXECUTION",
+               MachOHeader.FLAGS_ROOT_SAFE: "ROOT_SAFE",
+               MachOHeader.FLAGS_SETUID_SAFE: "SETUID_SAFE",
+               MachOHeader.FLAGS_NO_REEXPORTED_DYLIBS: "NO_REEXPORTED_DYLIBS",
+               MachOHeader.FLAGS_PIE: "PIE",
+               MachOHeader.FLAGS_DEAD_STRIPPABLE_DYLIB: "DEAD_STRIPPABLE_DYLIB",
+               MachOHeader.FLAGS_HAS_TLV_DESCRIPTORS: "HAS_TLV_DESCRIPTORS",
+               MachOHeader.FLAGS_NO_HEAP_EXECUTION: "NO_HEAP_EXECUTION"}
+
+        for key in val:
+            if self.flags & key == key:
+                retval.append(val[key])
+        return " | ".join(retval)
 
 
 class MachO(object):
