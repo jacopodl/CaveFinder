@@ -11,8 +11,10 @@ import io
 # *****************
 
 MACHO_UINT32 = 4
+MACHO_UINT64 = 8
 MACHO_CPUTYPE = 4
 MACHO_CPUSTYPE = 4
+MACHO_VM_PROT = 4
 
 MACHO_MAGIC32 = bytes([0xFE, 0xED, 0xFA, 0xCE])
 MACHO_CIGAM32 = bytes([0xCE, 0xFA, 0xED, 0xFE])
@@ -59,25 +61,25 @@ class MachOHeader(object):
         self.flags = 0
         self.reserved = 0
 
-        if self.magic == MACHO_MAGIC32 or self.magic == MACHO_CIGAM32:
+        if self.wordsz == 32:
             self.__parse32(stream, self.endianness)
-        elif self.magic == MACHO_MAGIC64 or self.magic == MACHO_CIGAM64:
-            self.__parse64(stream, self.endianness)
         else:
-            raise TypeError("Not a valid MachO")
-
-        self.magic = int.from_bytes(self.magic, self.endianness)
+            self.__parse64(stream, self.endianness)
 
     def __str__(self):
         return '\n'.join(['Mach-O HEADER',
-                          'Magic:                       {magic:#x}',
+                          'Magic:                       0x%02x',
                           'CPU type:                    %s',
                           'CPU subtype:                 {cpusubtype}',
                           'Filetype:                    %s',
                           'Number of commands:          {ncmds}',
                           'Size of commands:            {sizeofcmds} bytes',
-                          'Flags:                       {flags:#x} %s']).format(**self.__dict__) % (
-                   self.cputype_str(), self.filetype_str(), self.flags_str())
+                          'Flags:                       {flags:#x} %s']) \
+                   .format(**self.__dict__) % (
+                   int.from_bytes(self.magic, self.endianness),
+                   self.cputype_str(),
+                   self.filetype_str(),
+                   self.flags_str())
 
     def __parse32(self, stream: io.RawIOBase, endianness):
         self.cputype = int.from_bytes(stream.read(MACHO_CPUTYPE), byteorder=endianness)
@@ -102,6 +104,14 @@ class MachOHeader(object):
     @property
     def endianness(self):
         return 'little' if self.__should_swap_bytes() else 'big'
+
+    @property
+    def wordsz(self):
+        if self.magic == MACHO_MAGIC32 or self.magic == MACHO_CIGAM32:
+            return 32
+        elif self.magic == MACHO_MAGIC64 or self.magic == MACHO_CIGAM64:
+            return 64
+        raise TypeError("Not a valid MachO")
 
     def cputype_str(self):
         val = {-1: "any",
@@ -169,9 +179,81 @@ class MachOHeader(object):
         return " | ".join(retval)
 
 
+class MachOSegment(object):
+    SEGNAME_SIZE = 16
+
+    LC_SEGMENT = 0x1  # segment of this file to be mapped
+    LC_SYMTAB = 0x2  # link-edit stab symbol table info
+    LC_SYMSEG = 0x3  # link-edit gdb symbol table info (obsolete)
+    LC_THREAD = 0x4  # thread
+    LC_UNIXTHREAD = 0x5  # unix thread (includes a stack)
+    LC_LOADFVMLIB = 0x6  # load a specified fixed VM shared library
+    LC_IDFVMLIB = 0x7  # fixed VM shared library identification
+    LC_IDENT = 0x8  # object identification info (obsolete)
+    LC_FVMFILE = 0x9  # fixed VM file inclusion (internal use)
+    LC_PREPAGE = 0xA  # prepage command (internal use)
+    LC_DYSYMTAB = 0xB  # dynamic link-edit symbol table info
+    LC_LOAD_DYLIB = 0xC  # load a dynamically linked shared library
+    LC_ID_DYLIB = 0xD  # dynamically linked shared lib ident
+    LC_LOAD_DYLINKER = 0xE  # load a dynamic linker
+    LC_ID_DYLINKER = 0xF  # dynamic linker identification
+    LC_PREBOUND_DYLIB = 0x10  # modules prebound for a dynamically
+    LC_ROUTINES = 0x11  # image routines
+    LC_SUB_FRAMEWORK = 0x12  # sub framework
+    LC_SUB_UMBRELLA = 0x13  # sub umbrella
+    LC_SUB_CLIENT = 0x14  # sub client
+    LC_SUB_LIBRARY = 0x15  # sub library
+    LC_TWOLEVEL_HINTS = 0x16  # two-level namespace lookup hints
+    LC_PREBIND_CKSUM = 0x17  # prebind checksum
+
+    def __init__(self, stream: io.RawIOBase, header: MachOHeader):
+        self.cmd = 0
+        self.cmdsize = 0
+        self.segname = str()
+        self.vmaddr = 0
+        self.vmsize = 0
+        self.fileoff = 0
+        self.filesize = 0
+        self.maxprot = 0
+        self.initprot = 0
+        self.nsects = 0
+        self.flags = 0
+
+        if header.wordsz == 32:
+            self.__parse32(stream, header.endianness)
+        else:
+            self.__parse64(stream, header.endianness)
+
+    def __parse32(self, stream: io.RawIOBase, endianness):
+        self.cmd = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.cmdsize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        if self.cmd == 0x01:
+            self.segname = stream.read(MachOSegment.SEGNAME_SIZE).decode("ascii")
+            self.vmaddr = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+            self.vmsize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+            self.fileoff = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+            self.filesize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+            self.maxprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
+            self.initprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
+            self.nsects = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+            self.flags = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+
+    def __parse64(self, stream: io.RawIOBase, endianness):
+        pass
+
+
 class MachO(object):
     def __init__(self, stream: io.RawIOBase):
         self.header = MachOHeader(stream)
+        self.segments = []
+
+        # Segments
+        seek = stream.tell()
+        for _ in range(self.header.ncmds):
+            seg = MachOSegment(stream, self.header)
+            self.segments.append(seg)
+            seek += seg.cmdsize
+            stream.seek(seek)
 
     def __str__(self):
         return str(self.header)
