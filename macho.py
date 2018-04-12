@@ -179,9 +179,7 @@ class MachOHeader(object):
         return " | ".join(retval)
 
 
-class MachOSegment(object):
-    SEGNAME_SIZE = 16
-
+class MachOCommand(object):
     LC_SEGMENT = 0x1  # segment of this file to be mapped
     LC_SYMTAB = 0x2  # link-edit stab symbol table info
     LC_SYMSEG = 0x3  # link-edit gdb symbol table info (obsolete)
@@ -205,10 +203,30 @@ class MachOSegment(object):
     LC_SUB_LIBRARY = 0x15  # sub library
     LC_TWOLEVEL_HINTS = 0x16  # two-level namespace lookup hints
     LC_PREBIND_CKSUM = 0x17  # prebind checksum
+    LC_SEGMENT_64 = 0x19
 
-    def __init__(self, stream: io.RawIOBase, header: MachOHeader):
+    def __init__(self, stream: io.RawIOBase, header: MachOHeader, command=None):
         self.cmd = 0
         self.cmdsize = 0
+
+        if command is None:
+            self.cmd = int.from_bytes(stream.read(MACHO_UINT32), header.endianness)
+            self.cmdsize = int.from_bytes(stream.read(MACHO_UINT32), header.endianness)
+        else:
+            self.cmd = command.cmd
+            self.cmdsize = command.cmdsize
+
+    def __str__(self):
+        return "\n".join(["Mach-O Command",
+                          "Command:         {cmd}",
+                          "Command size:    {cmdsize}"]).format(**self.__dict__)
+
+
+class MachOSegment(MachOCommand):
+    SEGNAME_SIZE = 16
+
+    def __init__(self, stream: io.RawIOBase, header: MachOHeader, command: MachOCommand):
+        super().__init__(stream, header, command)
         self.segname = str()
         self.vmaddr = 0
         self.vmsize = 0
@@ -219,44 +237,57 @@ class MachOSegment(object):
         self.nsects = 0
         self.flags = 0
 
+        if self.cmd != MachOCommand.LC_SEGMENT and self.cmd != MachOCommand.LC_SEGMENT_64:
+            raise TypeError("It is not a MachOSegment")
+
         if header.wordsz == 32:
             self.__parse32(stream, header.endianness)
         else:
             self.__parse64(stream, header.endianness)
 
     def __parse32(self, stream: io.RawIOBase, endianness):
-        self.cmd = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-        self.cmdsize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-        if self.cmd == 0x01:
-            self.segname = stream.read(MachOSegment.SEGNAME_SIZE).decode("ascii")
-            self.vmaddr = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-            self.vmsize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-            self.fileoff = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-            self.filesize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-            self.maxprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
-            self.initprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
-            self.nsects = int.from_bytes(stream.read(MACHO_UINT32), endianness)
-            self.flags = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.segname = stream.read(MachOSegment.SEGNAME_SIZE).decode("ascii")
+        self.vmaddr = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.vmsize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.fileoff = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.filesize = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.maxprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
+        self.initprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
+        self.nsects = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.flags = int.from_bytes(stream.read(MACHO_UINT32), endianness)
 
     def __parse64(self, stream: io.RawIOBase, endianness):
-        pass
+        self.segname = stream.read(MachOSegment.SEGNAME_SIZE).decode("ascii")
+        self.vmaddr = int.from_bytes(stream.read(MACHO_UINT64), endianness)
+        self.vmsize = int.from_bytes(stream.read(MACHO_UINT64), endianness)
+        self.fileoff = int.from_bytes(stream.read(MACHO_UINT64), endianness)
+        self.filesize = int.from_bytes(stream.read(MACHO_UINT64), endianness)
+        self.maxprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
+        self.initprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
+        self.nsects = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+        self.flags = int.from_bytes(stream.read(MACHO_UINT32), endianness)
 
 
 class MachO(object):
     def __init__(self, stream: io.RawIOBase):
         self.header = MachOHeader(stream)
         self.segments = []
+        self.sections = []
 
-        # Segments
-        seek = stream.tell()
-        for _ in range(self.header.ncmds):
-            seg = MachOSegment(stream, self.header)
-            self.segments.append(seg)
-            seek += seg.cmdsize
-            stream.seek(seek)
+        self.__load_commands(stream)
 
     def __str__(self):
         return str(self.header)
+
+    def __load_commands(self, stream):
+        seek = stream.tell()
+        for _ in range(self.header.ncmds):
+            command = MachOCommand(stream, self.header)
+            if command.cmd == MachOCommand.LC_SEGMENT or command.cmd == MachOCommand.LC_SEGMENT_64:
+                self.segments.append(MachOSegment(stream, self.header, command))
+
+            seek += command.cmdsize
+            stream.seek(seek)
 
     @staticmethod
     def verify(file: io.RawIOBase):
