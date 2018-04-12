@@ -60,8 +60,15 @@ def search_by_type(stream, cave_size, _bytes, btype):
     if isinstance(btype, Elf):
         elf: Elf = btype
         for section in elf.sections:
+            stream.seek(section.sh_offset)
             info = "Type: %s, Flags: %s" % (section.type_str(), section.flags_str())
             caves += search4cave(stream, elf.get_section_name(section), section.sh_size, info, cave_size, 0, _bytes)
+    elif isinstance(btype, MachO):
+        macho: MachO = btype
+        for section in macho.sections:
+            stream.seek(section.offset)
+            caves += search4cave(stream, "%s.%s" % (section.segname, section.sectname), section.size, None, cave_size,
+                                 section.addr, _bytes)
 
     return caves
 
