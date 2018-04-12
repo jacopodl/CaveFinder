@@ -15,7 +15,7 @@ class MiningResult(object):
                           "Cave begin:         {cave_begin} - {cave_begin:#x}",
                           "Cave end:           {cave_end} - {cave_end:#x}",
                           "Cave size:          {cave_size}",
-                          "Virtaddr:           {virtaddr} - {virtaddr:#x}",
+                          "Virtaddr:           {virtaddr:#x}",
                           "info:               {info}"]).format(**self.__dict__)
 
 
@@ -24,25 +24,26 @@ def search4cave(stream: io.RawIOBase, section_name: str, section_size: int, sect
     caves = []
     byte_count = 0
 
-    offset = stream.tell()
+    base = stream.tell()
+    offset = 0
 
     while section_size > 0:
         rb = stream.read(1)
         section_size -= 1
+        offset += 1
 
         if _bytes not in rb:
             if byte_count >= cave_size:
                 mr = MiningResult()
                 mr.name = section_name
-                mr.cave_begin = offset - byte_count
-                mr.cave_end = offset
+                mr.cave_begin = (base + offset) - byte_count - 1
+                mr.cave_end = (base + offset) - 1
                 mr.cave_size = byte_count
-                mr.virtaddr = virtaddr + mr.cave_begin
+                mr.virtaddr = virtaddr + offset - byte_count - 1
                 mr.info = section_info
                 caves.append(mr)
             byte_count = 0
             continue
         byte_count += 1
-        offset += 1
 
     return caves
