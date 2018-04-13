@@ -10,12 +10,14 @@ import io
 # |     Data      |
 # *****************
 
+# DataType
 MACHO_UINT32 = 4
 MACHO_UINT64 = 8
 MACHO_CPUTYPE = 4
 MACHO_CPUSTYPE = 4
 MACHO_VM_PROT = 4
 
+# MAGICS
 MACHO_MAGIC32 = bytes([0xFE, 0xED, 0xFA, 0xCE])
 MACHO_CIGAM32 = bytes([0xCE, 0xFA, 0xED, 0xFE])
 MACHO_MAGIC64 = bytes([0xFE, 0xED, 0xFA, 0xCF])
@@ -69,8 +71,8 @@ class MachOHeader(object):
             self.__parse64(stream, self.endianness)
 
     def __str__(self):
-        return '\n'.join(['Mach-O HEADER',
-                          'Magic:                       0x%02x',
+        return '\n'.join(['Mach-O Header',
+                          'Magic:                       %s',
                           'CPU type:                    %s',
                           'CPU subtype:                 {cpusubtype}',
                           'Filetype:                    %s',
@@ -78,7 +80,7 @@ class MachOHeader(object):
                           'Size of commands:            {sizeofcmds} bytes',
                           'Flags:                       {flags:#x} %s']) \
                    .format(**self.__dict__) % (
-                   int.from_bytes(self.magic, self.endianness),
+                   ("%02x" % int.from_bytes(self.magic, self.endianness)).upper(),
                    self.cputype_str(),
                    self.filetype_str(),
                    self.flags_str())
@@ -116,8 +118,7 @@ class MachOHeader(object):
         raise TypeError("Not a valid MachO")
 
     def cputype_str(self):
-        val = {-1: "any",
-               1: "VAX",
+        val = {1: "VAX",
                6: "MC680x0",
                7: "Intel x86",
                7 | MachOHeader.ABI64: "AMD x86_64",

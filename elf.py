@@ -1,5 +1,6 @@
 import io
 
+# DataType
 ELF32_ADDR = 4
 ELF32_HALF = 2
 ELF32_OFF = 4
@@ -7,6 +8,7 @@ ELF32_SWORD = 4
 ELF32_WORD = 4
 ELF32_LWORD = 8
 
+# DataType 64
 ELF64_ADDR = 8
 ELF64_HALF = 2
 ELF64_OFF = 8
@@ -15,6 +17,9 @@ ELF64_SXWORD = 8
 ELF64_WORD = 4
 ELF64_LWORD = 8
 ELF64_XWORD = 8
+
+# MAGIC
+ELF_MAGIC = bytes([0x7f, 0x45, 0x4c, 0x46])
 
 
 class ElfHeader(object):
@@ -41,7 +46,6 @@ class ElfHeader(object):
     DATA2MSB = 0x02
 
     def __init__(self, stream: io.RawIOBase):
-        self.stream = stream
         self.e_ident = bytes(ElfHeader.NIDENT)
         self.e_type = 0
         self.e_machine = 0
@@ -57,7 +61,7 @@ class ElfHeader(object):
         self.e_shnum = 0
         self.e_shstrnd = 0
 
-        self.e_ident = self.stream.read(ElfHeader.NIDENT)
+        self.e_ident = stream.read(ElfHeader.NIDENT)
         if self.wordsz == 32:
             self.__parse32(stream, self.endianness)
         elif self.wordsz == 64:
@@ -94,8 +98,8 @@ class ElfHeader(object):
         self.e_shstrnd = int.from_bytes(stream.read(ELF64_HALF), byteorder=endianness)
 
     def __str__(self):
-        return '\n'.join(['ELF HEADER',
-                          'Magic:                       7F 45 4C 46',
+        return '\n'.join(['ELF Header',
+                          'Magic:                       %s',
                           'ABI:                         %s',
                           'Type:                        {e_type} (%s)',
                           'Machine:                     {e_machine} (%s)',
@@ -111,7 +115,8 @@ class ElfHeader(object):
                           'Size of section headers:     {e_shentsize}',
                           'Number of section headers:   {e_shnum}',
                           'String table index:          {e_shstrnd}']) \
-                   .format(**self.__dict__) % (self.abi,
+                   .format(**self.__dict__) % (" ".join([("%02x" % x).upper() for x in self.e_ident]),
+                                               self.abi,
                                                self.type_str(),
                                                self.em_str(),
                                                self.endianness,
@@ -131,7 +136,11 @@ class ElfHeader(object):
 
     @property
     def wordsz(self):
-        return 32 if self.e_ident[ElfHeader.CLASS] == ElfHeader.CLASS32 else 64
+        if self.e_ident[ElfHeader.CLASS] == ElfHeader.CLASS32:
+            return 32
+        elif self.e_ident[ElfHeader.CLASS] == ElfHeader.CLASS64:
+            return 64
+        raise TypeError("Not a valid ELF")
 
     def type_str(self):
         val = {0x00: "No file type",
@@ -258,17 +267,12 @@ class ElfShdr(object):
 
 
 class Elf:
-    ELF_MAGIC = bytearray([0x7f, 0x45, 0x4c, 0x46])
-
     def __init__(self, stream: io.RawIOBase):
-        if not Elf.verify(stream):
-            raise TypeError("Not a valid ELF")
-
         self.header = ElfHeader(stream)
         self.sections = []
-        self.shstr = bytes()
+        self.shstr = None
 
-        # Sections
+        # Load sections
         seek = self.header.e_shoff
         for _ in range(self.header.e_shnum):
             stream.seek(seek)
@@ -296,6 +300,6 @@ class Elf:
     def verify(file: io.RawIOBase):
         s_pos = file.tell()
         ident = file.read(ElfHeader.NIDENT)
-        ret = Elf.ELF_MAGIC in ident[0:4]
+        ret = ELF_MAGIC in ident[0:4]
         file.seek(s_pos)
         return ret
