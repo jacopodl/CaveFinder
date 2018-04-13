@@ -225,8 +225,13 @@ class MachOCommand(object):
 
 
 class MachOSegment(MachOCommand):
+    VMPROT_READ = 0x01
+    VMPROT_WRITE = 0x02
+    VMPROT_EXECUTE = 0x04
+
     def __init__(self, stream: io.RawIOBase, header: MachOHeader, command: MachOCommand):
         super().__init__(stream, header, command)
+        self.sections = []
         self.segname = str()
         self.vmaddr = 0
         self.vmsize = 0
@@ -244,6 +249,10 @@ class MachOSegment(MachOCommand):
             self.__parse32(stream, header.endianness)
         else:
             self.__parse64(stream, header.endianness)
+
+        # Load sections
+        for section in range(self.nsects):
+            self.sections.append(MachOSection(stream, header))
 
     def __parse32(self, stream: io.RawIOBase, endianness):
         self.segname = stream.read(MACHO_NAMESIZE).decode("ascii")
@@ -266,6 +275,25 @@ class MachOSegment(MachOCommand):
         self.initprot = int.from_bytes(stream.read(MACHO_VM_PROT), endianness)
         self.nsects = int.from_bytes(stream.read(MACHO_UINT32), endianness)
         self.flags = int.from_bytes(stream.read(MACHO_UINT32), endianness)
+
+    @property
+    def initprot_str(self):
+        return MachOSegment.__vmprot_str(self.initprot)
+
+    @property
+    def maxprot_str(self):
+        return MachOSegment.__vmprot_str(self.maxprot)
+
+    @staticmethod
+    def __vmprot_str(vprot):
+        retval = []
+        val = {MachOSegment.VMPROT_READ: "READ",
+               MachOSegment.VMPROT_WRITE: "WRITE",
+               MachOSegment.VMPROT_EXECUTE: "EXECUTE"}
+        for key in val:
+            if vprot & key == key:
+                retval.append(val[key])
+        return " | ".join(retval)
 
 
 class MachOSection(object):
@@ -319,7 +347,6 @@ class MachO(object):
     def __init__(self, stream: io.RawIOBase):
         self.header = MachOHeader(stream)
         self.segments = []
-        self.sections = []
 
         self.__load_commands(stream)
 
@@ -333,8 +360,6 @@ class MachO(object):
             if command.cmd == MachOCommand.LC_SEGMENT or command.cmd == MachOCommand.LC_SEGMENT_64:
                 segment = MachOSegment(stream, self.header, command)
                 self.segments.append(segment)
-                for _s in range(segment.nsects):
-                    self.sections.append(MachOSection(stream, self.header))
             seek += command.cmdsize
             stream.seek(seek)
 
