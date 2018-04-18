@@ -17,6 +17,7 @@ import io
 MS_CHAR = 1
 MS_WORD = 2
 MS_DWORD = 4
+MS_QWORD = 8
 
 # 
 MZ_CIGAM = bytes([0x4D, 0x5A])
@@ -189,8 +190,7 @@ class OptionalHeader(object):
         self.size_uninitialized_data = int.from_bytes(stream.read(MS_DWORD), endianness)
         self.address_entry_point = int.from_bytes(stream.read(MS_DWORD), endianness)
         self.base_code = int.from_bytes(stream.read(MS_DWORD), endianness)
-        self.base_data = int.from_bytes(stream.read(MS_DWORD), endianness)
-        self.image_base = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.image_base = int.from_bytes(stream.read(MS_QWORD), endianness)
         self.section_alignment = int.from_bytes(stream.read(MS_DWORD), endianness)
         self.file_alignment = int.from_bytes(stream.read(MS_DWORD), endianness)
         self.major_osversion = int.from_bytes(stream.read(MS_WORD), endianness)
@@ -205,12 +205,12 @@ class OptionalHeader(object):
         self.checksum = int.from_bytes(stream.read(MS_DWORD), endianness)
         self.subsystem = int.from_bytes(stream.read(MS_WORD), endianness)
         self.dll_characteristics = int.from_bytes(stream.read(MS_WORD), endianness)
-        self.size_stack_reserve = int.from_bytes(stream.read(MS_DWORD), endianness)
-        self.size_stack_commit = int.from_bytes(stream.read(MS_DWORD), endianness)
-        self.size_heap_reserve = int.from_bytes(stream.read(MS_DWORD), endianness)
-        self.size_heap_commit = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_stack_reserve = int.from_bytes(stream.read(MS_QWORD), endianness)
+        self.size_stack_commit = int.from_bytes(stream.read(MS_QWORD), endianness)
+        self.size_heap_reserve = int.from_bytes(stream.read(MS_QWORD), endianness)
+        self.size_heap_commit = int.from_bytes(stream.read(MS_QWORD), endianness)
         self.loader_flags = int.from_bytes(stream.read(MS_DWORD), endianness)
-        self.number_rva_andSizes = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.number_rva_and_sizes = int.from_bytes(stream.read(MS_DWORD), endianness)
 
     def subsytem_str(self):
         val = {
@@ -234,6 +234,34 @@ class OptionalHeader(object):
         return 0
 
 
+class PeSectionHeader(object):
+    SECTION_NAME_LEN = 8
+
+    def __init__(self, stream: io.RawIOBase, endianness):
+        self.name = stream.read(PeSectionHeader.SECTION_NAME_LEN).decode("ascii")
+        self.physaddr_or_virtsize = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.virtual_addr = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_rawdata = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.ptr_rawdata = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.ptr_relocations = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.ptr_linenumbers = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.nrelocations = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.nlinenumbers = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.characteristics = int.from_bytes(stream.read(MS_DWORD), endianness)
+
+    def __str__(self):
+        return "\n".join(["Section Header",
+                          "Name:                    {name}",
+                          "Virtual address:         {virtual_addr:#x}",
+                          "Size of raw data:        {size_rawdata:#x}",
+                          "Pointer to raw data:     {ptr_rawdata:#x}",
+                          "Pointer to relocations:  {ptr_relocations:#x}",
+                          "Pointer to line numbers: {ptr_linenumbers:#x}",
+                          "Number of relocations:   {nrelocations:#x}",
+                          "Number of line numbers:  {nlinenumbers:#x}",
+                          "Characteristics:         {characteristics:#x}"]).format(**self.__dict__)
+
+
 class PEHeader(object):
     def __init__(self, stream: io.RawIOBase):
         self.signature = stream.read(MS_DWORD)
@@ -241,9 +269,13 @@ class PEHeader(object):
             raise TypeError("Not a valid PE (Invalid NT signature)")
 
         self.file_header = COFFHeader(stream, self.endianness)
+
+        # Parse optional header
         self.optional_header = None
+        jmp_op = stream.tell()
         if self.file_header.size_opheader > 0:
             self.optional_header = OptionalHeader(stream, self.endianness)
+        stream.seek(jmp_op + self.file_header.size_opheader)
 
     @property
     def endianness(self):
@@ -255,6 +287,11 @@ class Pe(object):
         self.dos_header = DosHeader(stream)
         stream.seek(self.dos_header.e_lfanew)
         self.pe_header = PEHeader(stream)
+
+        # Parse sections
+        self.sections = []
+        for _ in range(self.pe_header.file_header.nsections):
+            self.sections.append(PeSectionHeader(stream, self.pe_header.endianness))
 
     @staticmethod
     def verify(file: io.RawIOBase):

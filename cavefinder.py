@@ -2,6 +2,8 @@ import argparse
 import sys
 
 from finder import search4cave
+from elf import *
+from macho import *
 from mspe import *
 
 __version__ = "1.0.0"
@@ -75,6 +77,13 @@ def search_by_type(stream, cave_size, _bytes, btype):
                 info = "%s [%s]" % (segment.initprot_str, segment.maxprot_str)
                 caves += search4cave(stream, "%s.%s" % (section.segname, section.sectname), section.size, info,
                                      cave_size, section.addr, _bytes)
+    elif isinstance(btype, Pe):
+        pe: Pe = btype
+        for section in pe.sections:
+            stream.seek(section.ptr_rawdata)
+            # print(section)
+            caves += search4cave(stream, section.name, section.size_rawdata, None, cave_size,
+                                 pe.pe_header.optional_header.image_base + section.virtual_addr, _bytes)
 
     return caves
 
