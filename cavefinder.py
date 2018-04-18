@@ -1,8 +1,8 @@
 import argparse
 import sys
+
 from finder import search4cave
-from elf import *
-from macho import *
+from mspe import *
 
 __version__ = "1.0.0"
 
@@ -53,6 +53,8 @@ def load_binary(stream):
         return Elf(stream)
     elif MachO.verify(stream):
         return MachO(stream)
+    elif Pe.verify(stream):
+        return Pe(stream)
     return None
 
 
