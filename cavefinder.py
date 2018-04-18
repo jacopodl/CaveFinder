@@ -79,11 +79,11 @@ def search_by_type(stream, cave_size, _bytes, btype):
                                      cave_size, section.addr, _bytes)
     elif isinstance(btype, Pe):
         pe: Pe = btype
+        image_base = pe.pe_header.optional_header.image_base
         for section in pe.sections:
             stream.seek(section.ptr_rawdata)
-            # print(section)
             caves += search4cave(stream, section.name, section.size_rawdata, None, cave_size,
-                                 pe.pe_header.optional_header.image_base + section.virtual_addr, _bytes)
+                                 image_base + section.virtual_addr, _bytes)
 
     return caves
 

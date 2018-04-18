@@ -14,7 +14,7 @@ class MiningResult(object):
         return "\n".join(["Section name:       {name}",
                           "Cave begin:         {cave_begin} - {cave_begin:#x}",
                           "Cave end:           {cave_end} - {cave_end:#x}",
-                          "Cave size:          {cave_size}",
+                          "Cave size:          {cave_size} bytes",
                           "Virtaddr:           {virtaddr:#x}",
                           "info:               {info}"]).format(**self.__dict__)
 

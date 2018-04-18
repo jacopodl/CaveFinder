@@ -277,6 +277,9 @@ class PEHeader(object):
             self.optional_header = OptionalHeader(stream, self.endianness)
         stream.seek(jmp_op + self.file_header.size_opheader)
 
+    def __str__(self):
+        return str(self.file_header)
+
     @property
     def endianness(self):
         return 'little' if PE_CIGAM in self.signature else 'big'
@@ -292,6 +295,11 @@ class Pe(object):
         self.sections = []
         for _ in range(self.pe_header.file_header.nsections):
             self.sections.append(PeSectionHeader(stream, self.pe_header.endianness))
+
+    def __str__(self):
+        return "\n".join(["Pe Header",
+                          "Magic:                   %s",
+                          "%s"]) % (self.pe_header.signature, str(self.pe_header))
 
     @staticmethod
     def verify(file: io.RawIOBase):
