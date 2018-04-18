@@ -100,18 +100,161 @@ class DosHeader(object):
         return 'little' if self.e_magic == MZ_CIGAM else 'big'
 
 
-# https://en.wikibooks.org/wiki/X86_Disassembly/Windows_Executable_Files
-# https://github.com/Alexpux/mingw-w64/blob/master/mingw-w64-tools/widl/include/winnt.h
-# https://msdn.microsoft.com/en-us/library/windows/desktop/ms680547(v=vs.85).aspx#file_headers
+class COFFHeader(object):
+    MACHINE_UNKNOWN = 0  # sconosciuta
+    MACHINE_I386 = 0x014c  # Intel 386.
+    MACHINE_R3000 = 0x0162  # MIPS little-endian, 0x160 big-endian
+    MACHINE_R4000 = 0x0166  # MIPS little-endian
+    MACHINE_R10000 = 0x0168  # MIPS little-endian
+    MACHINE_WCEMIPSV2 = 0x0169  # MIPS little-endian WCE v2
+    MACHINE_ALPHA = 0x0184  # Alpha_AXP
+    MACHINE_POWERPC = 0x01F0  # IBM PowerPC Little-Endian
+    MACHINE_SH3 = 0x01a2  # SH3 little-endian
+    MACHINE_SH3E = 0x01a4  # SH3E little-endian
+    MACHINE_SH4 = 0x01a6  # SH4 little-endian
+    MACHINE_ARM = 0x01c0  # ARM Little-Endian
+    MACHINE_THUMB = 0x01c2
+    MACHINE_AMD64 = 0x8664
+    MACHINE_IA64 = 0x0200  # Intel 64
+    MACHINE_MIPS16 = 0x0266  # MIPS
+    MACHINE_MIPSFPU = 0x0366  # MIPS
+    MACHINE_MIPSFPU16 = 0x0466  # MIPS
+    MACHINE_ALPHA64 = 0x0284  # ALPHA64
+
+    def __init__(self, stream: io.RawIOBase, endianness):
+        self.machine = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.nsections = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.timestamp = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.ptr_to_symtable = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.nsym = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_opheader = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.characteristics = int.from_bytes(stream.read(MS_WORD), endianness)
+
+    def __str__(self):
+        return "\n".join(["Machine:                 {machine} (%s)",
+                          "Number of sections:      {nsections}",
+                          "Timestamp:               {timestamp}",
+                          "Ptr to symbol table:     {ptr_to_symtable}",
+                          "Number of symbol:        {nsym}",
+                          "Size of optional header: {size_opheader}",
+                          "Characteristics:         {characteristics}"]).format(**self.__dict__) % self.machine_str
+
+    @property
+    def machine_str(self):
+        val = {
+            COFFHeader.MACHINE_UNKNOWN: "unknown",
+            COFFHeader.MACHINE_I386: "Intel 386",
+            COFFHeader.MACHINE_R3000: "MIPS little-endian",
+            COFFHeader.MACHINE_R4000: "MIPS little-endian",
+            COFFHeader.MACHINE_R10000: "MIPS little-endian",
+            COFFHeader.MACHINE_WCEMIPSV2: "MIPS little-endian WCE v2",
+            COFFHeader.MACHINE_ALPHA: "Alpha_AXP",
+            COFFHeader.MACHINE_POWERPC: "PowerPC little-endian",
+            COFFHeader.MACHINE_SH3: "SH3 little-endian",
+            COFFHeader.MACHINE_SH3E: "SH3E little-endian",
+            COFFHeader.MACHINE_SH4: "SH4 little-endian",
+            COFFHeader.MACHINE_ARM: "ARM little-endian",
+            COFFHeader.MACHINE_THUMB: "THUMB",
+            COFFHeader.MACHINE_AMD64: "AMD 64",
+            COFFHeader.MACHINE_IA64: "Intel 64",
+            COFFHeader.MACHINE_MIPS16: "MIPS",
+            COFFHeader.MACHINE_MIPSFPU: "MIPS",
+            COFFHeader.MACHINE_MIPSFPU16: "MIPS",
+            COFFHeader.MACHINE_ALPHA64: "ALPHA64"
+        }
+
+        return "Unknown: %02x" % self.machine if self.machine not in val else val[self.machine]
+
+
+class OptionalHeader(object):
+    IMAGE_NT_OPTIONAL_HDR32_MAGIC = 0x10b
+    IMAGE_NT_OPTIONAL_HDR64_MAGIC = 0x20b
+    IMAGE_ROM_OPTIONAL_HDR_MAGIC = 0x107
+
+    IMAGE_SUBSYSTEM_UNKNOWN = 0x0
+    IMAGE_SUBSYSTEM_NATIVE = 0x1
+    IMAGE_SUBSYSTEM_WINDOWS_GUI = 0x2
+    IMAGE_SUBSYSTEM_WINDOWS_CUI = 0x3
+    IMAGE_SUBSYSTEM_OS2_CUI = 0x5
+    IMAGE_SUBSYSTEM_POSIX_CUI = 0x7
+    IMAGE_SUBSYSTEM_NATIVE_WINDOWS = 0x8
+    IMAGE_SUBSYSTEM_WINDOWS_CE_GUI = 0x9
+
+    def __init__(self, stream: io.RawIOBase, endianness):
+        self.magic = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.major_linker_version = int.from_bytes(stream.read(MS_CHAR), endianness)
+        self.minor_linker_version = int.from_bytes(stream.read(MS_CHAR), endianness)
+        self.size_of_code = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_initialized_data = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_uninitialized_data = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.address_entry_point = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.base_code = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.base_data = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.image_base = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.section_alignment = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.file_alignment = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.major_osversion = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.minor_osversion = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.major_image_version = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.minor_image_version = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.major_subsystem_version = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.minor_subsystem_version = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.win32_version = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_image = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_headers = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.checksum = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.subsystem = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.dll_characteristics = int.from_bytes(stream.read(MS_WORD), endianness)
+        self.size_stack_reserve = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_stack_commit = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_heap_reserve = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.size_heap_commit = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.loader_flags = int.from_bytes(stream.read(MS_DWORD), endianness)
+        self.number_rva_andSizes = int.from_bytes(stream.read(MS_DWORD), endianness)
+
+    def subsytem_str(self):
+        val = {
+            OptionalHeader.IMAGE_SUBSYSTEM_UNKNOWN: "Unknown",
+            OptionalHeader.IMAGE_SUBSYSTEM_NATIVE: "Native",
+            OptionalHeader.IMAGE_SUBSYSTEM_WINDOWS_GUI: "Windows GUI",
+            OptionalHeader.IMAGE_SUBSYSTEM_WINDOWS_CUI: "Console",
+            OptionalHeader.IMAGE_SUBSYSTEM_OS2_CUI: "OS/2 Console",
+            OptionalHeader.IMAGE_SUBSYSTEM_POSIX_CUI: "Posix Console",
+            OptionalHeader.IMAGE_SUBSYSTEM_NATIVE_WINDOWS: "diver 9x native",
+            OptionalHeader.IMAGE_SUBSYSTEM_WINDOWS_CE_GUI: "Windows CE",
+        }
+        return "Unknown: %02x" % self.subsystem if self.subsystem not in val else val[self.subsystem]
+
+    @property
+    def wordsz(self):
+        if self.magic == OptionalHeader.IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+            return 32
+        elif self.magic == OptionalHeader.IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+            return 64
+        return 0
+
+
+class PEHeader(object):
+    def __init__(self, stream: io.RawIOBase):
+        self.signature = stream.read(MS_DWORD)
+        if PE_CIGAM not in self.signature and PE_MAGIC not in self.signature:
+            raise TypeError("Not a valid PE (Invalid NT signature)")
+
+        self.file_header = COFFHeader(stream, self.endianness)
+        self.optional_header = None
+        if self.file_header.size_opheader > 0:
+            self.optional_header = OptionalHeader(stream, self.endianness)
+
+    @property
+    def endianness(self):
+        return 'little' if PE_CIGAM in self.signature else 'big'
+
+
 class Pe(object):
     def __init__(self, stream: io.RawIOBase):
         self.dos_header = DosHeader(stream)
-
-        # Read NT signature
         stream.seek(self.dos_header.e_lfanew)
-        self.nt_signature = stream.read(MS_DWORD)
-        if PE_CIGAM not in self.nt_signature and PE_MAGIC not in self.nt_signature:
-            raise TypeError("Not a valid PE (Invalid NT signature)")
+        self.pe_header = PEHeader(stream)
 
     @staticmethod
     def verify(file: io.RawIOBase):
