@@ -1,7 +1,8 @@
 import argparse
 import sys
+import os
 
-from finder import search4cave
+from finder import search4cave, verifycave
 from elf import *
 from macho import *
 from mspe import *
@@ -20,20 +21,17 @@ WELCOME = """
 
 def main():
     parser = argparse.ArgumentParser(description="Dig in a binary to find all code caves")
-    parser.add_argument("binary", help="Executable file")
-    parser.add_argument("--size", help="Minimum size of a code cave, Default: 100", type=int, default=100)
-    parser.add_argument("--byte", help="Byte to search, Default: 0x00", type=str, default="0x00")
+    parser.add_argument("--size", help="minimum size of a code cave, default: 100", type=int, default=100)
+    parser.add_argument("--byte", help="byte to search, default: 0x00", type=str, default="0x00")
+    parser.add_argument("--payload", help="file with payload to be injected", type=str, metavar="<file_name>")
+    parser.add_argument("--addr", help="address where to inject the payload", type=str, metavar="<address>", default=0)
+    parser.add_argument("binary", help="executable file")
     args = parser.parse_args()
 
     print(WELCOME % __version__, end='\n\n')
     print("[*] Loading binary '%s'..." % args.binary, end="\n\n")
 
-    try:
-        stream = open(args.binary, "rb")
-    except FileNotFoundError as err:
-        print(err, file=sys.stderr)
-        exit(-1)
-
+    stream = open_file(args.binary, args.payload is not None)
     btype = load_binary(stream)
 
     if btype is None:
@@ -42,12 +40,38 @@ def main():
 
     print(btype, end="\n\n")
 
-    caves = search_by_type(stream, args.size, bytes([int(args.byte.encode("ascii"), 16)]), btype)
+    if args.payload is None:
+        caves = search_by_type(stream, args.size, bytes([int(args.byte.encode("ascii"), 16)]), btype)
+        print("[!] Caves found: %d" % len(caves), end="\n\n")
+        for cave in caves:
+            print(cave, end="\n\n")
+        print("[*] Mining finished")
+    else:
+        addr_base = int(args.addr.encode("ascii"), 16)
+        payload = open_file(args.payload)
+        paysize = os.path.getsize(args.payload)
+        print("[*] Injecting %s (size %d bytes) into %s..." % (args.payload, paysize, args.binary))
 
-    print("[!] Caves found: %d" % len(caves), end="\n\n")
-    for cave in caves:
-        print(cave, end="\n\n")
-    print("[*] Mining finished")
+        stream.seek(addr_base)
+        if not verifycave(stream, paysize, bytes([int(args.byte.encode("ascii"), 16)])):
+            print("Payload is too big for %s@0x%02x, aborted!" % (args.binary, addr_base), file=sys.stderr)
+            exit(-1)
+
+        stream.write(payload.read())
+        payload.close()
+        print("[*] Finished")
+
+    stream.close()
+
+
+def open_file(file: str, writable=False) -> io.RawIOBase:
+    stream: io.RawIOBase = None
+    try:
+        stream = open(file, "rb" if not writable else "r+b")
+    except FileNotFoundError as err:
+        print(err, file=sys.stderr)
+        exit(-1)
+    return stream
 
 
 def load_binary(stream):

@@ -46,4 +46,18 @@ def search4cave(stream: io.RawIOBase, section_name: str, section_size: int, sect
             continue
         byte_count += 1
 
+    stream.seek(base)
     return caves
+
+
+def verifycave(stream: io.RawIOBase, cave_size, _byte: bytes):
+    base = stream.tell()
+    success = True
+    while cave_size > 0:
+        cave_size -= 1
+        rb = stream.read(1)
+        if _byte not in rb:
+            success = False
+            break
+    stream.seek(base)
+    return success
