@@ -1,11 +1,11 @@
 import argparse
-import sys
 import os
+import sys
 
 from finder import search4cave, verifycave
-from elf import *
-from macho import *
-from mspe import *
+from support.elf import *
+from support.macho import *
+from support.mspe import *
 
 __version__ = "1.0.0"
 
