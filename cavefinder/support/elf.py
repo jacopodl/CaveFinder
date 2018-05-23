@@ -1,4 +1,4 @@
-from support.cstruct import *
+from cavefinder.support.cstruct import *
 
 # MAGIC
 ELF_MAGIC = bytes([0x7f, 0x45, 0x4c, 0x46])

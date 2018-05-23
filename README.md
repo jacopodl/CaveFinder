@@ -10,5 +10,12 @@ CaveFinder supports three types of executables:
 - MachO
 - Pe
 
+## Installation
+The package can be installed through pip:
+
+    $ pip install cavefinder
+
+or downloaded from [GitHub](https://github.com/jacopodl/cavefinder).
+
 ## License ##
 Made with :heartpulse: by <b>JDL</b> and released under <b>GPL3 license</b>.

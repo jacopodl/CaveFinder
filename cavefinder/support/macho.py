@@ -1,4 +1,4 @@
-from support.cstruct import *
+from cavefinder.support.cstruct import *
 
 # *****************
 # *  Fat Header   *

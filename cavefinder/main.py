@@ -2,10 +2,10 @@ import argparse
 import os
 import sys
 
-from finder import search4cave, verifycave
-from support.elf import *
-from support.macho import *
-from support.mspe import *
+from cavefinder.finder import search4cave, verifycave
+from cavefinder.support.elf import *
+from cavefinder.support.macho import *
+from cavefinder.support.mspe import *
 
 __version__ = "1.0.0"
 
