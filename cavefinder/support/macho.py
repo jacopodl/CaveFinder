@@ -313,8 +313,8 @@ class MachOSection(object, metaclass=CStruct):
 
     def __init__(self, stream: io.RawIOBase, header: MachOHeader):
         self.unpack_from_io(stream, header.endianness)
-        self.sectname = self.sectname.decode("ascii")
-        self.segname = self.segname.decode("ascii")
+        self.sectname = self.sectname.decode("ascii", "backslashreplace")
+        self.segname = self.segname.decode("ascii", "backslashreplace")
 
 
 class MachOSection32(MachOSection):
